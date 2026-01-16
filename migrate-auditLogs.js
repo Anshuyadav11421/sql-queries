@@ -1,27 +1,17 @@
-const { MongoClient } = require("mongodb");
-const sql = require("mssql/msnodesqlv8");
-
-const sqlConfig = {
-  connectionString:
-    "Driver={ODBC Driver 17 for SQL Server};" +
-    "Server=(localdb)\\MSSQLLocalDB;" +
-    "Database=crm_sql;" +
-    "Trusted_Connection=Yes;"
-};
-
-const mongoClient = new MongoClient("mongodb://localhost:27017");
+const { connectMongo, closeMongo } = require("./db/mongo");
+const { sql, connectSql, closeSql } = require("./db/sql");
 
 async function migrateAuditLogs() {
   try {
-    await mongoClient.connect();
-    await sql.connect(sqlConfig);
+    const db = await connectMongo();
+    await connectSql();
 
-    const db = mongoClient.db("crm_db");
     const auditLogs = await db.collection("auditLogs").find().toArray();
 
     await sql.query(`
-      IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='audit_logs')
-      
+      IF NOT EXISTS (
+        SELECT * FROM sysobjects WHERE name = 'audit_logs' AND xtype = 'U'
+      )
       CREATE TABLE audit_logs (
         id INT IDENTITY PRIMARY KEY,
         mongo_id VARCHAR(50) UNIQUE,
@@ -48,21 +38,25 @@ async function migrateAuditLogs() {
         )
         VALUES (
           ${log._id.toString()},
-          ${log.action},
-          ${log.userEmail},
-          ${log.ipAddress},
-          ${log.userAgent},
-          ${new Date(log.timestamp)}
+          ${log.action || null},
+          ${log.userEmail || null},
+          ${log.ipAddress || null},
+          ${log.userAgent || null},
+          ${log.timestamp ? new Date(log.timestamp) : null}
         )
       `;
     }
 
-    console.log(`Audit logs migrated: ${auditLogs.length}`);
-    process.exit(0);
+    console.log(` Audit logs migrated: ${auditLogs.length}`);
+
   } catch (err) {
     console.error(" AuditLogs migration failed:", err);
-    process.exit(1);
+  } finally {
+    
+    await closeMongo();
+    await closeSql();
   }
 }
 
-migrateAuditLogs();
+
+module.exports = migrateAuditLogs;

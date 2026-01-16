@@ -1,29 +1,17 @@
-const { MongoClient } = require("mongodb");
-const sql = require("mssql/msnodesqlv8");
-
-const sqlConfig = {
-  connectionString:
-    "Driver={ODBC Driver 17 for SQL Server};" +
-    "Server=(localdb)\\MSSQLLocalDB;" +
-    "Database=crm_sql;" +
-    "Trusted_Connection=Yes;"
-};
-
-const mongoClient = new MongoClient("mongodb://localhost:27017");
+const { connectMongo, closeMongo } = require("./db/mongo");
+const { sql, connectSql, closeSql } = require("./db/sql");
 
 async function migrateNotifications() {
   try {
-    await mongoClient.connect();
-    await sql.connect(sqlConfig);
-
-    const db = mongoClient.db("crm_db");
+    const db = await connectMongo();
+    await connectSql();
 
     const notifications = await db
       .collection("notifications")
       .find({})
       .toArray();
 
-    console.log("Notifications found:", notifications.length);
+    console.log(" Notifications found:", notifications.length);
 
     for (const n of notifications) {
       await sql.query`
@@ -48,7 +36,6 @@ async function migrateNotifications() {
           ${n.title || null},
           ${n.message || null},
           ${n.type || null},
-
           ${n.userId || null},
           ${n.leadId || null},
           ${n.isRead ? 1 : 0},
@@ -61,12 +48,14 @@ async function migrateNotifications() {
     }
 
     console.log(" Notifications migrated successfully");
-    process.exit(0); 
-       
+
   } catch (err) {
     console.error(" Notifications migration failed:", err);
-    process.exit(1);
+  } finally {
+    await closeMongo();
+    await closeSql();
   }
 }
 
-migrateNotifications();
+
+module.exports = migrateNotifications;

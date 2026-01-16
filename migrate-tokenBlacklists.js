@@ -1,30 +1,17 @@
-const { MongoClient } = require("mongodb");
-
-const sql = require("mssql/msnodesqlv8");
-
-const sqlConfig = {
-  connectionString:
-    "Driver={ODBC Driver 17 for SQL Server};" +
-    "Server=(localdb)\\MSSQLLocalDB;" +
-    "Database=crm_sql;" +
-    "Trusted_Connection=Yes;"
-};
-
-const mongoClient = new MongoClient("mongodb://localhost:27017");
+const { connectMongo, closeMongo } = require("./db/mongo");
+const { sql, connectSql, closeSql } = require("./db/sql");
 
 async function migrateTokenBlacklist() {
   try {
-    await mongoClient.connect();
-    await sql.connect(sqlConfig);
-
-    const db = mongoClient.db("crm_db");
+    const db = await connectMongo();
+    await connectSql();
 
     const tokens = await db
       .collection("tokenBlacklist")
       .find({})
       .toArray();
 
-    console.log("Blacklisted tokens found:", tokens.length);
+    console.log(" Blacklisted tokens found:", tokens.length);
 
     for (const t of tokens) {
       await sql.query`
@@ -40,7 +27,7 @@ async function migrateTokenBlacklist() {
         )
         VALUES (
           ${t._id.toString()},
-          ${t.token},
+          ${t.token || null},
           ${t.userId || null},
           ${t.expiresAt ? new Date(t.expiresAt) : null},
           ${t.createdAt ? new Date(t.createdAt) : null}
@@ -49,14 +36,13 @@ async function migrateTokenBlacklist() {
     }
 
     console.log(" Token blacklist migrated successfully");
-    process.exit(0);
+
   } catch (err) {
     console.error(" Token blacklist migration failed:", err);
-    process.exit(1);
+  } finally {
+    await closeMongo();
+    await closeSql();
   }
 }
-
-migrateTokenBlacklist();                           
-
-
+module.exports = migrateTokenBlacklist;
 

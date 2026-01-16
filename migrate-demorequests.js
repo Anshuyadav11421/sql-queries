@@ -1,31 +1,17 @@
-const { MongoClient } = require("mongodb");
-const sql = require("mssql/msnodesqlv8");
-
-const sqlConfig = {
-  connectionString:
-    "Driver={ODBC Driver 17 for SQL Server};" +
-    "Server=(localdb)\\MSSQLLocalDB;" +
-    "Database=crm_sql;" +
-    "Trusted_Connection=Yes;"
-};
-
-const mongoClient = new MongoClient("mongodb://localhost:27017");
+const { connectMongo, closeMongo } = require("./db/mongo");
+const { sql, connectSql, closeSql } = require("./db/sql");
 
 async function migrateDemoRequests() {
   try {
-    await mongoClient.connect();
-    await sql.connect(sqlConfig);
-
-    const db = mongoClient.db("crm_db");
-
-
+    const db = await connectMongo();
+    await connectSql();
 
     const demoRequests = await db
       .collection("demo_requests")
       .find({})
       .toArray();
 
-    console.log("Demo requests found:", demoRequests.length);
+    console.log(" Demo requests found:", demoRequests.length);
 
     for (const d of demoRequests) {
       await sql.query`
@@ -67,12 +53,14 @@ async function migrateDemoRequests() {
       `;
     }
 
-    console.log("Demo requests migrated successfully");
-    process.exit(0);
+    console.log(" Demo requests migrated successfully");
+
   } catch (err) {
-    console.error("Demo request migration failed:", err);
-    process.exit(1);
+    console.error(" Demo request migration failed:", err);
+  } finally {
+    await closeMongo();
+    await closeSql();
   }
 }
 
-migrateDemoRequests();
+module.exports = migrateDemoRequests;

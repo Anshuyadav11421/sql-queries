@@ -1,28 +1,17 @@
-const { MongoClient } = require("mongodb");
-const sql = require("mssql/msnodesqlv8");
-
-const sqlConfig = {
-  connectionString:
-    "Driver={ODBC Driver 17 for SQL Server};" +
-    "Server=(localdb)\\MSSQLLocalDB;" +
-    "Database=crm_sql;" +
-    "Trusted_Connection=Yes;"
-};
-
-const mongoClient = new MongoClient("mongodb://localhost:27017");
+const { connectMongo, closeMongo } = require("./db/mongo");
+const { sql, connectSql, closeSql } = require("./db/sql");
 
 async function migrateCalendars() {
   try {
-    await mongoClient.connect();
-    await sql.connect(sqlConfig);
+    const db = await connectMongo();
+    await connectSql();
 
-    const db = mongoClient.db("crm_db");
+    const calendars = await db
+      .collection("calendars")
+      .find({})
+      .toArray();
 
-
-
-    const calendars = await db.collection("calendars").find({}).toArray();
-
-    console.log("Calendars found:", calendars.length);
+    console.log(" Calendars found:", calendars.length);
 
     for (const c of calendars) {
       await sql.query`
@@ -71,11 +60,14 @@ async function migrateCalendars() {
     }
 
     console.log(" Calendars migrated successfully");
-    process.exit(0);
+
   } catch (err) {
     console.error(" Calendar migration failed:", err);
-    process.exit(1);
+  } finally {
+    await closeMongo();
+    await closeSql();
   }
 }
 
-migrateCalendars();
+
+module.exports = migrateCalendars;

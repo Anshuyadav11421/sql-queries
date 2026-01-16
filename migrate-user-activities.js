@@ -1,29 +1,17 @@
-const { MongoClient } = require("mongodb");
-const sql = require("mssql/msnodesqlv8");
-
-const sqlConfig = {
-  connectionString:
-    "Driver={ODBC Driver 17 for SQL Server};" +
-    "Server=(localdb)\\MSSQLLocalDB;" +
-    "Database=crm_sql;" +
-    "Trusted_Connection=Yes;"
-};
-
-const mongoClient = new MongoClient("mongodb://localhost:27017");
+const { connectMongo, closeMongo } = require("./db/mongo");
+const { sql, connectSql, closeSql } = require("./db/sql");
 
 async function migrateUserActivity() {
   try {
-    await mongoClient.connect();
-    await sql.connect(sqlConfig);
-
-    const db = mongoClient.db("crm_db");
+    const db = await connectMongo();
+    await connectSql();
 
     const activities = await db
       .collection("userActivity")
       .find({})
       .toArray();
 
-    console.log("User activities found:", activities.length);
+    console.log(" User activities found:", activities.length);
 
     for (const a of activities) {
       await sql.query`
@@ -56,11 +44,13 @@ async function migrateUserActivity() {
     }
 
     console.log(" User activity migrated successfully");
-    process.exit(0);
+
   } catch (err) {
     console.error(" User activity migration failed:", err);
-    process.exit(1);
+  } finally {
+    await closeMongo();
+    await closeSql();
   }
 }
 
-migrateUserActivity();
+module.exports = migrateUserActivity;

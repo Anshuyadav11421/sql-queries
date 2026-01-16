@@ -1,26 +1,17 @@
-const { MongoClient } = require("mongodb");
-const sql = require("mssql/msnodesqlv8");
-
-const sqlConfig = {
-  connectionString:
-    "Driver={ODBC Driver 17 for SQL Server};" +
-    "Server=(localdb)\\MSSQLLocalDB;" +
-    "Database=crm_sql;" +
-    "Trusted_Connection=Yes;"
-};
-
-const mongoClient = new MongoClient("mongodb://localhost:27017");
+const { connectMongo, closeMongo } = require("./db/mongo");
+const { sql, connectSql, closeSql } = require("./db/sql");
 
 async function migrateSupportTickets() {
   try {
-    await mongoClient.connect();
-    await sql.connect(sqlConfig);
+    const db = await connectMongo();
+    await connectSql();
 
-    const db = mongoClient.db("crm_db");
+    const tickets = await db
+      .collection("supports_tickets")
+      .find({})
+      .toArray();
 
-    const tickets = await db.collection("supports_tickets").find({}).toArray();
-
-    console.log("Support tickets found:", tickets.length);
+    console.log(" Support tickets found:", tickets.length);
 
     for (const t of tickets) {
       await sql.query`
@@ -112,11 +103,13 @@ async function migrateSupportTickets() {
     }
 
     console.log(" Support tickets & replies migrated successfully");
-    process.exit(0);
+
   } catch (err) {
     console.error(" Support ticket migration failed:", err);
-    process.exit(1);
+  } finally {
+    await closeMongo();
+    await closeSql();
   }
 }
 
-migrateSupportTickets();
+module.exports = migrateSupportTickets;

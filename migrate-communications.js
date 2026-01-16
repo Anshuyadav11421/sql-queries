@@ -1,29 +1,17 @@
-const { MongoClient } = require("mongodb");
-const sql = require("mssql/msnodesqlv8");
-
-const sqlConfig = {
-  connectionString:
-    "Driver={ODBC Driver 17 for SQL Server};" +
-    "Server=(localdb)\\MSSQLLocalDB;" +
-    "Database=crm_sql;" +
-    "Trusted_Connection=Yes;"
-};
-
-const mongoClient = new MongoClient("mongodb://localhost:27017");
+const { connectMongo, closeMongo } = require("./db/mongo");
+const { sql, connectSql, closeSql } = require("./db/sql");
 
 async function migrateCommunications() {
   try {
-    await mongoClient.connect();
-    await sql.connect(sqlConfig);
-
-    const db = mongoClient.db("crm_db");
+    const db = await connectMongo();
+    await connectSql();
 
     const communications = await db
       .collection("communications")
       .find({})
       .toArray();
 
-    console.log("Communications found:", communications.length);
+    console.log(" Communications found:", communications.length);
 
     for (const c of communications) {
       await sql.query`
@@ -58,11 +46,14 @@ async function migrateCommunications() {
     }
 
     console.log(" Communications migrated successfully");
-    process.exit(0);
+
   } catch (err) {
     console.error(" Communications migration failed:", err);
-    process.exit(1);
+  } finally {
+    await closeMongo();
+    await closeSql();
   }
 }
 
-migrateCommunications();
+
+module.exports = migrateCommunications;

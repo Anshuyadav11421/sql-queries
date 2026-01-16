@@ -1,27 +1,17 @@
-const {MongoClient} = require("mongodb");
-
-const sql = require("mssql/msnodesqlv8");
-
-const sqlConfig = {
-  connectionString:
-    "Driver={ODBC Driver 17 for SQL Server};" +
-    "Server=(localdb)\\MSSQLLocalDB;" +
-    "Database=crm_sql;" +
-    "Trusted_Connection=Yes;"
-};
-
-const mongoClient = new MongoClient("mongodb://localhost:27017");
+const { connectMongo, closeMongo } = require("./db/mongo");
+const { sql, connectSql, closeSql } = require("./db/sql");
 
 async function migrateTasks() {
   try {
-    await mongoClient.connect();
-    await sql.connect(sqlConfig);
+    const db = await connectMongo();
+    await connectSql();
 
-    const db = mongoClient.db("crm_db");
+    const tasks = await db
+      .collection("tasks")
+      .find({})
+      .toArray();
 
-    const tasks = await db.collection("tasks").find({}).toArray();
-
-    console.log("Tasks found:", tasks.length);
+    console.log(" Tasks found:", tasks.length);
 
     for (const t of tasks) {
       await sql.query`
@@ -56,7 +46,7 @@ async function migrateTasks() {
           ${t.status || null},
           ${t.priority || null},
           ${t.dueDate ? new Date(t.dueDate) : null},
-          ${t.dueTime || null},  
+          ${t.dueTime || null},
           ${t.emailNotification ? 1 : 0},
           ${t.notificationsSent?.tenMin ? 1 : 0},
           ${t.notificationsSent?.fifteenMin ? 1 : 0},
@@ -72,11 +62,14 @@ async function migrateTasks() {
     }
 
     console.log(" Tasks migrated successfully");
-    process.exit(0);
+
   } catch (err) {
     console.error(" Task migration failed:", err);
-    process.exit(1);
+  } finally {
+    await closeMongo();
+    await closeSql();
   }
 }
 
-migrateTasks();
+
+module.exports = migrateTasks;
